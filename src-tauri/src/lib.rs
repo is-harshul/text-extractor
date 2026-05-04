@@ -19,6 +19,17 @@ struct AppState {
     capture: Mutex<Option<capture::Capture>>,
 }
 
+/// Hide the overlay window cleanly, exiting macOS simple-fullscreen first.
+#[tauri::command]
+fn close_overlay(app: AppHandle) -> Result<(), String> {
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        #[cfg(target_os = "macos")]
+        let _ = overlay.set_simple_fullscreen(false);
+        overlay.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Returns the (width, height) of the active capture in physical pixels
 /// so the frontend can compute scale factors for HiDPI displays.
 #[tauri::command]
@@ -45,12 +56,22 @@ async fn process_selection(
         let state: State<AppState> = app.state();
         let cap = state.capture.lock().map_err(|e| e.to_string())?;
         let cap = cap.as_ref().ok_or("no active capture")?;
-        capture::crop(cap, x, y, w, h)
+        let c = capture::crop(cap, x, y, w, h);
+        // Debug: write full capture + cropped region to /tmp for inspection.
+        let _ = cap.image.save("/tmp/text-extractor-capture.png");
+        let _ = c.save("/tmp/text-extractor-crop.png");
+        log::warn!(
+            "selection: x={x} y={y} w={w} h={h} | capture: {}x{}",
+            cap.width, cap.height
+        );
+        c
     };
 
     // Hide the overlay BEFORE OCR finishes so the notification (and any
     // visual feedback) appears against the user's real desktop.
     if let Some(overlay) = app.get_webview_window("overlay") {
+        #[cfg(target_os = "macos")]
+        let _ = overlay.set_simple_fullscreen(false);
         let _ = overlay.hide();
     }
 
@@ -119,8 +140,19 @@ fn trigger_capture(app: &AppHandle) {
             }
         }
 
-        // Reveal the overlay
+        // Reveal the overlay sized to the primary monitor.
+        // We avoid `fullscreen: true` because on macOS that triggers native
+        // fullscreen (which animates into a new Space). Sizing to monitor
+        // bounds + simple_fullscreen keeps the overlay in the current Space.
         if let Some(overlay) = app.get_webview_window("overlay") {
+            if let Ok(Some(monitor)) = overlay.primary_monitor() {
+                let pos = monitor.position();
+                let size = monitor.size();
+                let _ = overlay.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
+                let _ = overlay.set_size(tauri::PhysicalSize::new(size.width, size.height));
+            }
+            #[cfg(target_os = "macos")]
+            let _ = overlay.set_simple_fullscreen(true);
             let _ = overlay.show();
             let _ = overlay.set_focus();
             // Tell the frontend the capture is ready so it can fetch dimensions
@@ -154,6 +186,12 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            // Tray-resident: hide from dock and remove the auto-generated
+            // menu bar app entry (otherwise we get a duplicate icon next to
+            // the real tray icon on macOS).
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             // --- Global hotkey ----------------------------------------------------
             // Note: on macOS this maps to Cmd+Shift+T because Tauri normalises
             // CONTROL → Cmd on Apple platforms.
@@ -208,7 +246,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_capture_dimensions,
-            process_selection
+            process_selection,
+            close_overlay
         ])
         .build(tauri::generate_context!())
         .expect("error building tauri application")

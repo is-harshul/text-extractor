@@ -21,12 +21,15 @@ pub fn capture_primary_monitor() -> Result<Capture, String> {
         .or_else(|| monitors.first())
         .ok_or_else(|| "no monitors detected".to_string())?;
 
-    let width = monitor.width().map_err(|e| format!("monitor width: {e}"))?;
-    let height = monitor.height().map_err(|e| format!("monitor height: {e}"))?;
-
     let buffer: RgbaImage = monitor
         .capture_image()
         .map_err(|e| format!("capture: {e}"))?;
+
+    // Use the actual captured image's dimensions (physical pixels).
+    // xcap's `monitor.width()/height()` return logical points, which mismatches
+    // the physical-pixel image on HiDPI displays and breaks coord scaling.
+    let width = buffer.width();
+    let height = buffer.height();
 
     Ok(Capture {
         image: DynamicImage::ImageRgba8(buffer),

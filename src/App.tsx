@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Status = "idle" | "ready" | "selecting" | "processing";
@@ -17,7 +16,7 @@ export default function App() {
     setRect(null);
     setStatus("idle");
     startRef.current = null;
-    await getCurrentWindow().hide();
+    await invoke("close_overlay");
   }, []);
 
   // Listen for the "capture-ready" event fired by Rust after a successful screen grab

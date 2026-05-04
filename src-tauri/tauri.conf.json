@@ -10,12 +10,12 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "overlay",
         "url": "index.html",
         "title": "Text Extractor",
-        "fullscreen": true,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
@@ -23,15 +23,13 @@
         "resizable": false,
         "visible": false,
         "shadow": false,
-        "focus": true
+        "focus": true,
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true
       }
     ],
     "security": {
       "csp": null
-    },
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true
     }
   },
   "bundle": {
