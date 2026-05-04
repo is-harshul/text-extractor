@@ -150,6 +150,54 @@ npm run tauri build
 
 Bundles land in `src-tauri/target/release/bundle/`.
 
+### Publishing to GitHub Releases
+
+Two paths — pick whichever fits.
+
+#### A. Local build, then publish (fast, single OS)
+
+Build on your machine, attach DMG/installer to a GitHub Release in one shot:
+
+```bash
+# bumps no version — uses current package.json version as tag
+npm run dist:publish
+```
+
+What it does:
+1. Runs the normal `npm run dist` build (universal macOS DMG by default).
+2. Reads `version` from [package.json](package.json), tags `v<version>`, pushes tag.
+3. `gh release create` (or `gh release upload --clobber` if tag already exists) attaches everything in `release/`.
+
+Override target arch:
+
+```bash
+PUBLISH=1 bash scripts/build-installer.sh host    # current arch only
+PUBLISH=1 bash scripts/build-installer.sh arm64
+```
+
+Requires: `gh auth login` once.
+
+#### B. CI builds for all OSes on tag push (recommended)
+
+[.github/workflows/release.yml](.github/workflows/release.yml) builds **macOS arm64 + macOS Intel + Linux (.deb/.AppImage) + Windows (.msi/.exe)** in parallel, then publishes a single GitHub Release with all artifacts attached.
+
+Trigger by pushing a tag:
+
+```bash
+# bump version in package.json + src-tauri/tauri.conf.json + src-tauri/Cargo.toml first
+git commit -am "release v0.2.0"
+git tag v0.2.0
+git push origin main v0.2.0
+```
+
+Or manually from the **Actions** tab → **Release** → **Run workflow** → enter tag.
+
+Friends download from `https://github.com/is-harshul/screen-text-selector/releases/latest`.
+
+> First run takes ~15–25 min (cold Rust + Tesseract build on 4 OSes). Subsequent runs cache and finish in ~5–10 min.
+>
+> Windows job uses `vcpkg` for Tesseract. If the build fails on Windows, the most common fix is regenerating `vcpkg` cache — see [tauri-apps/tauri#windows-tesseract](https://v2.tauri.app/distribute/windows-installer/) docs.
+
 ### Code signing (optional, recommended for wider distribution)
 
 Without signing, friends will hit OS warnings ("unidentified developer" / SmartScreen). To skip the warnings:

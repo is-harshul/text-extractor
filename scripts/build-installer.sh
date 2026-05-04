@@ -11,6 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 TARGET_ARG="${1:-universal}"
+PUBLISH="${PUBLISH:-0}"   # PUBLISH=1 -> upload to GitHub Release after build
 
 echo "==> Text Extractor installer build"
 echo "    root:   $ROOT"
@@ -92,4 +93,36 @@ NOTE for friends on macOS:
   Fix: right-click the app -> Open -> Open. Or:
     xattr -dr com.apple.quarantine "/Applications/Text Extractor.app"
 EOF
+fi
+
+# --- optional: publish to GitHub Release ---
+if [ "$PUBLISH" = "1" ]; then
+  command -v gh >/dev/null || { echo "gh CLI missing — brew install gh"; exit 1; }
+  VERSION="$(node -p "require('./package.json').version")"
+  TAG="v$VERSION"
+
+  echo
+  echo "==> Publishing to GitHub Release: $TAG"
+
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "WARN: working tree dirty. Commit before tagging for clean release."
+  fi
+
+  if git rev-parse "$TAG" >/dev/null 2>&1; then
+    echo "    tag $TAG exists locally — skipping tag create"
+  else
+    git tag "$TAG"
+    git push origin "$TAG"
+  fi
+
+  if gh release view "$TAG" >/dev/null 2>&1; then
+    echo "    release $TAG exists — uploading assets (clobber)"
+    gh release upload "$TAG" "$OUT"/* --clobber
+  else
+    gh release create "$TAG" "$OUT"/* \
+      --title "Text Extractor $TAG" \
+      --notes "Built from $(git rev-parse --short HEAD). macOS users: right-click → Open on first launch (unsigned)."
+  fi
+
+  echo "==> Done. https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/tag/$TAG"
 fi
