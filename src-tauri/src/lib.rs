@@ -1,0 +1,224 @@
+mod capture;
+mod ocr;
+
+use std::sync::Mutex;
+use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, State,
+};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_global_shortcut::{
+    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+};
+use tauri_plugin_notification::NotificationExt;
+
+/// Holds the current screen capture between the hotkey press and the
+/// user committing a selection in the overlay window.
+struct AppState {
+    capture: Mutex<Option<capture::Capture>>,
+}
+
+/// Returns the (width, height) of the active capture in physical pixels
+/// so the frontend can compute scale factors for HiDPI displays.
+#[tauri::command]
+fn get_capture_dimensions(state: State<AppState>) -> Result<(u32, u32), String> {
+    let cap = state.capture.lock().map_err(|e| e.to_string())?;
+    let cap = cap.as_ref().ok_or("no active capture")?;
+    Ok((cap.width, cap.height))
+}
+
+/// Crop the active capture to the given region, run OCR, and copy the
+/// result to the clipboard. Hides the overlay before showing the
+/// notification so the toast is visible against the user's actual desktop.
+#[tauri::command]
+async fn process_selection(
+    app: AppHandle,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Result<String, String> {
+    // Pull the capture out of state on the main thread, then hand it
+    // to a blocking task for OCR (CPU-heavy).
+    let cropped = {
+        let state: State<AppState> = app.state();
+        let cap = state.capture.lock().map_err(|e| e.to_string())?;
+        let cap = cap.as_ref().ok_or("no active capture")?;
+        capture::crop(cap, x, y, w, h)
+    };
+
+    // Hide the overlay BEFORE OCR finishes so the notification (and any
+    // visual feedback) appears against the user's real desktop.
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        let _ = overlay.hide();
+    }
+
+    let text = tokio::task::spawn_blocking(move || ocr::extract_text(&cropped))
+        .await
+        .map_err(|e| format!("ocr task panicked: {e}"))??;
+
+    if text.is_empty() {
+        let _ = app
+            .notification()
+            .builder()
+            .title("Text Extractor")
+            .body("No text detected in selection")
+            .show();
+    } else {
+        app.clipboard()
+            .write_text(text.clone())
+            .map_err(|e| format!("clipboard: {e}"))?;
+        let preview: String = text.chars().take(80).collect();
+        let body = if text.chars().count() > 80 {
+            format!("{preview}…")
+        } else {
+            preview
+        };
+        let _ = app
+            .notification()
+            .builder()
+            .title("Copied to clipboard")
+            .body(body)
+            .show();
+    }
+
+    Ok(text)
+}
+
+/// Trigger a screen capture and reveal the overlay window.
+/// Called from both the global hotkey handler and the tray menu.
+fn trigger_capture(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // xcap is blocking — run it on a blocking thread
+        let cap_result = tokio::task::spawn_blocking(capture::capture_primary_monitor).await;
+
+        let cap = match cap_result {
+            Ok(Ok(c)) => c,
+            Ok(Err(e)) => {
+                log::error!("capture failed: {e}");
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("Capture failed")
+                    .body(format!("Couldn't capture screen: {e}"))
+                    .show();
+                return;
+            }
+            Err(e) => {
+                log::error!("capture task panicked: {e}");
+                return;
+            }
+        };
+
+        // Stash the capture in state
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Ok(mut slot) = state.capture.lock() {
+                *slot = Some(cap);
+            }
+        }
+
+        // Reveal the overlay
+        if let Some(overlay) = app.get_webview_window("overlay") {
+            let _ = overlay.show();
+            let _ = overlay.set_focus();
+            // Tell the frontend the capture is ready so it can fetch dimensions
+            let _ = app.emit("capture-ready", ());
+        }
+    });
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .manage(AppState {
+            capture: Mutex::new(None),
+        })
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    let target = Shortcut::new(
+                        Some(Modifiers::CONTROL | Modifiers::SHIFT),
+                        Code::KeyT,
+                    );
+                    if shortcut == &target {
+                        trigger_capture(app);
+                    }
+                })
+                .build(),
+        )
+        .setup(|app| {
+            // --- Global hotkey ----------------------------------------------------
+            // Note: on macOS this maps to Cmd+Shift+T because Tauri normalises
+            // CONTROL → Cmd on Apple platforms.
+            let shortcut = Shortcut::new(
+                Some(Modifiers::CONTROL | Modifiers::SHIFT),
+                Code::KeyT,
+            );
+            app.global_shortcut().register(shortcut)?;
+
+            // --- Tray icon --------------------------------------------------------
+            let capture_item = MenuItem::with_id(
+                app,
+                "capture",
+                "Capture text  (Ctrl+Shift+T)",
+                true,
+                None::<&str>,
+            )?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&capture_item, &separator, &quit_item])?;
+
+            let _tray = TrayIconBuilder::with_id("main-tray")
+                .icon(app.default_window_icon().unwrap().clone())
+                .icon_as_template(true)
+                .tooltip("Text Extractor")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "capture" => trigger_capture(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Left-click the tray icon also triggers a capture
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        trigger_capture(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+
+            // --- Make sure overlay starts hidden ---------------------------------
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                let _ = overlay.hide();
+            }
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_capture_dimensions,
+            process_selection
+        ])
+        .build(tauri::generate_context!())
+        .expect("error building tauri application")
+        // Prevent the app from quitting when all windows are closed —
+        // this is a tray-resident utility.
+        .run(|_app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                // Allow explicit quits (from the tray menu calling app.exit)
+                // but ignore window-close-driven exits.
+                let _ = api;
+            }
+        });
+}
