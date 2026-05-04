@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dist": "bash scripts/build-installer.sh",
+    "dist:host": "bash scripts/build-installer.sh host",
+    "dist:arm64": "bash scripts/build-installer.sh arm64",
+    "dist:x86_64": "bash scripts/build-installer.sh x86_64"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",

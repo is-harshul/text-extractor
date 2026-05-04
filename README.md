@@ -4,6 +4,23 @@ A cross-platform Tauri desktop utility that extracts text from any region of you
 
 Press the global hotkey, drag a rectangle, and the recognised text lands on your clipboard.
 
+> Status: Tauri 2.x · macOS / Linux / Windows · 100% local OCR (no cloud calls)
+
+---
+
+## Table of contents
+
+- [How it works](#how-it-works)
+- [Quick start (users)](#quick-start-users)
+- [Quick start (developers)](#quick-start-developers)
+- [Building distributable installers](#building-distributable-installers)
+- [Platform notes](#platform-notes)
+- [Project layout](#project-layout)
+- [Architecture notes](#architecture-notes)
+- [Roadmap](#roadmap)
+
+---
+
 ## How it works
 
 1. App runs in the system tray (no main window).
@@ -12,13 +29,44 @@ Press the global hotkey, drag a rectangle, and the recognised text lands on your
 4. The selected region is cropped, preprocessed (upscaled + grayscaled), and run through Tesseract.
 5. Result is written to the clipboard with a notification toast.
 
-## Prerequisites
+---
 
-### All platforms
+## Quick start (users)
+
+> Just want to use the app? Grab the installer for your OS, install, launch — done.
+
+### macOS
+
+1. Download `Text Extractor_<version>_universal.dmg` (or the arch-specific build) from your distributor.
+2. Open the DMG, drag **Text Extractor** to Applications.
+3. **First launch:** right-click the app → **Open** → **Open**. (The app is unsigned; this bypasses Gatekeeper one time.)
+   Alternative one-liner:
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Text Extractor.app"
+   ```
+4. Grant **Screen Recording** permission when macOS asks (System Settings → Privacy & Security → Screen Recording). Without this, captures are black.
+5. Press **`Cmd+Shift+T`** anywhere → drag a rectangle → text is on your clipboard.
+
+### Linux
+
+1. Install the `.deb` (Debian/Ubuntu): `sudo dpkg -i text-extractor_<version>_amd64.deb`
+   Or run the `.AppImage`: `chmod +x Text\ Extractor_*.AppImage && ./Text\ Extractor_*.AppImage`
+2. Press **`Ctrl+Shift+T`** → drag → paste.
+
+### Windows
+
+1. Run the `.msi` or `.exe` installer.
+2. Press **`Ctrl+Shift+T`** → drag → paste.
+
+---
+
+## Quick start (developers)
+
+### Prerequisites
 
 - [Rust](https://rustup.rs/) (1.77+)
 - [Node.js](https://nodejs.org/) (18+)
-- Platform-specific Tauri prerequisites: see https://v2.tauri.app/start/prerequisites/
+- Platform-specific Tauri prerequisites: <https://v2.tauri.app/start/prerequisites/>
 
 ### Tesseract (system dependency)
 
@@ -30,50 +78,104 @@ The Rust `tesseract` crate links to libtesseract.
 | **Debian/Ubuntu** | `sudo apt install libtesseract-dev libleptonica-dev clang` |
 | **Fedora** | `sudo dnf install tesseract-devel leptonica-devel clang` |
 | **Arch** | `sudo pacman -S tesseract leptonica clang` |
-| **Windows** | Install [UB Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) and add it to PATH. You may also need to set `TESSDATA_PREFIX` to the `tessdata` directory. |
+| **Windows** | Install [UB Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki), add to `PATH`. May need `TESSDATA_PREFIX` pointing at the `tessdata` directory. |
 
-For shipping to end users, vendor the Tesseract binaries with your installer rather than asking users to install them.
+> When shipping to end users, **vendor** the Tesseract binaries inside your installer rather than asking users to install them.
 
-## Setup
+### Setup
 
 ```bash
 npm install
 ```
 
-You'll also need icons in `src-tauri/icons/` before the first build. Generate them from any 1024×1024 PNG with:
+If `src-tauri/icons/` is empty, generate icons from a 1024×1024 PNG:
 
 ```bash
 npm run tauri icon path/to/source.png
 ```
 
-## Run in dev mode
+### Dev mode
 
 ```bash
 npm run tauri dev
 ```
 
-The app launches and lives in the system tray. Press `Ctrl+Shift+T` to trigger.
+App launches into the system tray. Press the hotkey to trigger capture.
 
-## Build for distribution
+---
+
+## Building distributable installers
+
+A helper script wraps `tauri build` and collects every installer into `release/` so you can zip and send to friends.
+
+### One-liners
+
+```bash
+npm run dist           # macOS: universal DMG (arm64 + Intel) — slowest, widest reach
+npm run dist:host      # current arch only — fastest, recommended for testing
+npm run dist:arm64     # Apple silicon only
+npm run dist:x86_64    # Intel only
+```
+
+On Linux the script auto-builds `.deb` + `.AppImage`. On Windows it auto-builds `.msi` + `.exe` (NSIS).
+
+### What you get
+
+```
+release/
+└── Text Extractor_0.1.0_universal.dmg     # macOS
+    Text Extractor_0.1.0_amd64.deb         # Linux
+    text-extractor_0.1.0_amd64.AppImage    # Linux
+    Text Extractor_0.1.0_x64_en-US.msi     # Windows
+    Text Extractor_0.1.0_x64-setup.exe     # Windows
+```
+
+Send the file → friend installs → done.
+
+### What the script does
+
+[scripts/build-installer.sh](scripts/build-installer.sh):
+
+1. Verifies `node`, `npm`, `cargo` are installed.
+2. Runs `npm install` if `node_modules/` is missing.
+3. On macOS, `rustup target add`s required arches automatically.
+4. Calls `npx tauri build` with the right `--bundles` for the host OS.
+5. Copies every produced installer into `release/`.
+
+### Manual build (no script)
 
 ```bash
 npm run tauri build
 ```
 
-Bundles will appear in `src-tauri/target/release/bundle/`.
+Bundles land in `src-tauri/target/release/bundle/`.
+
+### Code signing (optional, recommended for wider distribution)
+
+Without signing, friends will hit OS warnings ("unidentified developer" / SmartScreen). To skip the warnings:
+
+- **macOS:** Apple Developer ID ($99/yr). Configure `bundle.macOS.signingIdentity` in [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) and set `APPLE_ID` / `APPLE_PASSWORD` for notarization.
+- **Windows:** EV or OV code-signing certificate. Configure `bundle.windows.certificateThumbprint`.
+- **Linux:** no signing required, but consider hosting the `.deb` in a PPA / providing a `.repo`.
+
+See <https://v2.tauri.app/distribute/> for full guides.
+
+---
 
 ## Platform notes
 
 ### macOS
 - First launch requires **Screen Recording** permission (System Settings → Privacy & Security → Screen Recording). Without it `xcap` returns a black image.
-- For distribution: code-sign and notarize the app, otherwise Gatekeeper will block it.
+- Unsigned builds trigger Gatekeeper. Right-click → Open works, or strip quarantine: `xattr -dr com.apple.quarantine "/Applications/Text Extractor.app"`.
 
 ### Linux
-- **X11**: works out of the box.
-- **Wayland**: `xcap` uses the `xdg-desktop-portal` protocol, which prompts the user to grant screen access *every capture session*. There's no way around this — it's a Wayland design decision. For a smoother experience, recommend X11 to users.
+- **X11:** works out of the box.
+- **Wayland:** `xcap` uses the `xdg-desktop-portal` protocol, which prompts the user to grant screen access *every capture session*. Wayland design decision — no way around it. Recommend X11 to users for a smoother experience.
 
 ### Windows
-- Smoothest of the three. Make sure your installer bundles `tesseract.dll`, `leptonica.dll`, and the `tessdata` folder (the English language data is ~15 MB).
+- Smoothest of the three. Make sure your installer bundles `tesseract.dll`, `leptonica.dll`, and the `tessdata` folder (English language data ≈ 15 MB).
+
+---
 
 ## Project layout
 
@@ -93,18 +195,24 @@ text-extractor/
 │   │   └── default.json       # Tauri 2 permissions
 │   ├── Cargo.toml
 │   └── tauri.conf.json
+├── scripts/
+│   └── build-installer.sh     # Distributable-installer builder
 ├── index.html
 ├── package.json
 ├── tsconfig.json
 └── vite.config.ts
 ```
 
+---
+
 ## Architecture notes
 
-- **Capture is taken before the overlay shows** so the user selects against a frozen, pre-captured image. Trying to capture *after* the user selects produces flicker and includes the overlay itself in the screenshot.
+- **Capture is taken before the overlay shows** so the user selects against a frozen, pre-captured image. Capturing *after* selection causes flicker and includes the overlay in the screenshot.
 - **OCR runs on a blocking task** (`tokio::task::spawn_blocking`) so it doesn't stall the Tauri event loop.
-- **The overlay window is hidden, not closed**, between captures. Recreating windows is slow on macOS and would add noticeable latency to the hotkey-to-overlay path.
-- **Scale factors are computed in the renderer** (`physicalWidth / window.innerWidth`) to handle HiDPI/Retina displays correctly. On mixed-DPI multi-monitor setups this can drift — the v2 fix is to capture the cursor's monitor specifically.
+- **The overlay window is hidden, not closed**, between captures. Recreating windows is slow on macOS and would add noticeable latency.
+- **Scale factors are computed in the renderer** (`physicalWidth / window.innerWidth`) to handle HiDPI/Retina displays. On mixed-DPI multi-monitor setups this can drift — v2 fix is to capture the cursor's monitor specifically.
+
+---
 
 ## Roadmap
 
@@ -114,3 +222,9 @@ text-extractor/
 - Optional cloud OCR (Google Vision) for higher accuracy
 - Capture history (last N extractions, accessible from tray)
 - Settings window (custom hotkey, OCR language, preprocessing toggles)
+
+---
+
+## License
+
+TBD — add a `LICENSE` file before public distribution.
