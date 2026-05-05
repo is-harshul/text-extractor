@@ -60,8 +60,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            patchelf libtesseract-dev libleptonica-dev clang
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            patchelf \
+            libtesseract-dev libleptonica-dev clang \
+            build-essential curl wget file libssl-dev
 
       - name: Install macOS deps
         if: startsWith(matrix.platform.name, 'macos')
@@ -101,6 +108,7 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: build
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     permissions:
       contents: write
