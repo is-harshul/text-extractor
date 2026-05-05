@@ -37,19 +37,19 @@ Press the global hotkey, drag a rectangle, and the recognised text lands on your
 
 ### Download
 
-Latest installers are published on the [**Releases page**](https://github.com/is-harshul/text-extractor/releases/latest).
+Latest installers: [**Releases page**](https://github.com/is-harshul/text-extractor/releases/latest) · current **v0.1.1**.
 
 | OS | Installer | Direct download |
 | --- | --- | --- |
-| macOS (Apple silicon, M1/M2/M3) | `Text Extractor_<ver>_aarch64.dmg` | [download](https://github.com/is-harshul/text-extractor/releases/latest/download/Text.Extractor_aarch64.dmg) |
-| macOS (Intel) | `Text Extractor_<ver>_x64.dmg` | [download](https://github.com/is-harshul/text-extractor/releases/latest/download/Text.Extractor_x64.dmg) |
-| Windows (installer) | `Text Extractor_<ver>_x64-setup.exe` | [download](https://github.com/is-harshul/text-extractor/releases/latest/download/Text.Extractor_x64-setup.exe) |
-| Windows (MSI) | `Text Extractor_<ver>_x64_en-US.msi` | [download](https://github.com/is-harshul/text-extractor/releases/latest/download/Text.Extractor_x64_en-US.msi) |
-| Linux | `.deb` / `.AppImage` | _coming soon — Linux CI build still being fixed_ |
+| macOS (Apple silicon — M1/M2/M3) | `Text Extractor_0.1.0_aarch64.dmg` | [⬇ download](https://github.com/is-harshul/text-extractor/releases/latest/download/Text.Extractor_0.1.0_aarch64.dmg) |
+| macOS (Intel) | `Text Extractor_0.1.0_x64.dmg` | _coming soon — CI runner backlog_ |
+| Windows (installer) | `Text Extractor_0.1.0_x64-setup.exe` | [⬇ download](https://github.com/is-harshul/text-extractor/releases/latest/download/Text.Extractor_0.1.0_x64-setup.exe) |
+| Windows (MSI) | `Text Extractor_0.1.0_x64_en-US.msi` | [⬇ download](https://github.com/is-harshul/text-extractor/releases/latest/download/Text.Extractor_0.1.0_x64_en-US.msi) |
+| Linux (.deb / .AppImage) | — | _coming soon — CI build being fixed_ |
 
-> Direct-download links use GitHub's `/releases/latest/download/<filename>` redirect — they always point at the newest release. If a link 404s, the asset filename in the release didn't exactly match; open the [Releases page](https://github.com/is-harshul/text-extractor/releases/latest) and grab the file by hand.
+> Direct-download links hit GitHub's `/releases/latest/download/<filename>` redirect — auto-tracks the newest release. GitHub stores asset filenames with `.` in place of spaces, so the URL has `Text.Extractor_...` while the file you save is named `Text Extractor_...`.
 >
-> **macOS:** filenames in the table use `.` in place of spaces because GitHub's redirect doesn't tolerate spaces. The actual filename you'll see after download is `Text Extractor_<ver>_<arch>.dmg`.
+> If a link 404s after a version bump, the version segment in the filename changed (e.g. `0.1.0` → `0.2.0`). Open the [Releases page](https://github.com/is-harshul/text-extractor/releases/latest) and grab the file by hand.
 
 
 ### macOS
