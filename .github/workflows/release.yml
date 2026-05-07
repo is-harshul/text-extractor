@@ -68,6 +68,8 @@ jobs:
             patchelf \
             libtesseract-dev libleptonica-dev clang \
             libpipewire-0.3-dev libdbus-1-dev \
+            libgbm-dev libegl1-mesa-dev libwayland-dev \
+            libxcb1-dev libarchive-dev libcurl4-openssl-dev \
             build-essential curl wget file libssl-dev
 
       - name: Install macOS deps
