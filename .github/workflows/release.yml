@@ -67,6 +67,7 @@ jobs:
             libayatana-appindicator3-dev \
             patchelf \
             libtesseract-dev libleptonica-dev clang \
+            libpipewire-0.3-dev libdbus-1-dev \
             build-essential curl wget file libssl-dev
 
       - name: Install macOS deps
