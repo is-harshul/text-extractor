@@ -6,6 +6,14 @@ Press the global hotkey, drag a rectangle, and the recognised text lands on your
 
 > Status: Tauri 2.x · macOS / Linux / Windows · 100% local OCR (no cloud calls)
 
+### Demo
+
+https://github.com/is-harshul/text-extractor/raw/main/demo.mp4
+
+<video src="demo.mp4" controls width="720">
+  Your browser does not support inline video — <a href="demo.mp4">download demo.mp4</a>.
+</video>
+
 ---
 
 ## Table of contents
